@@ -32,6 +32,9 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
