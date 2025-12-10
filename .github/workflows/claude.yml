@@ -36,11 +36,17 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Activate Unity License
-        uses: game-ci/unity-activate@v2
+        run: |
+          # Create Unity license directory
+          mkdir -p /root/.local/share/unity3d/Unity
+
+          # Write license file
+          echo "$UNITY_LICENSE" | tr -d '\r' > /root/.local/share/unity3d/Unity/Unity_lic.ulf
+
+          # Verify license file was created
+          ls -la /root/.local/share/unity3d/Unity/
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
 
       - name: Run Claude Code
         id: claude
