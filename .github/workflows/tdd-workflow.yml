@@ -160,7 +160,7 @@ jobs:
             # Compilation failed → Fix compilation errors
             echo "phase=0" >> $GITHUB_OUTPUT
             echo "phase_name=Fix Compilation Errors" >> $GITHUB_OUTPUT
-            echo "phase_instruction=⚠️ The project failed to compile! Fix all compilation errors before tests can run. Check the test runner logs for error details. You should verify your code compiles locally using: unity-editor -quit -batchmode -nographics -projectPath . -executeMethod UnityEditor.EditorApplication.Exit -logFile - 2>&1 | grep -i 'error\\|exception'" >> $GITHUB_OUTPUT
+            echo "phase_instruction=⚠️ The project failed to compile! Fix all compilation errors before tests can run. Check the test runner logs in the previous workflow run for error details. You cannot verify compilation yourself - push your fixes and the workflow will re-check." >> $GITHUB_OUTPUT
             echo "should_run_claude=true" >> $GITHUB_OUTPUT
             echo "should_continue=true" >> $GITHUB_OUTPUT
             echo "🔥 Compilation Failed - Must Fix Errors"
@@ -346,13 +346,11 @@ jobs:
           - Push to the branch: `git push -u origin ${{ github.head_ref || github.ref_name }}`
           - The workflow will automatically run tests again and continue to the next phase
 
-          ### Available Commands
-          - **REQUIRED before pushing**: Verify build compiles:
-            ```bash
-            unity-editor -quit -batchmode -nographics -projectPath . -executeMethod UnityEditor.EditorApplication.Exit -logFile - 2>&1 | grep -iE 'error|exception|fail' || echo "✅ Build verified"
-            ```
-          - Do NOT run: `unity-editor -runTests` (the workflow does this)
-          - Test results: Will be provided in the next workflow run
+          ### Important Notes
+          - You do NOT have access to unity-editor CLI (licensing only works in game-ci actions)
+          - The workflow will detect compilation errors automatically via Phase 0
+          - If your code doesn't compile, you'll be called back with error details
+          - Write code carefully and the workflow will verify it
 
           EOF
 
@@ -372,7 +370,8 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           additional_permissions: |
             actions: read
-          claude_args: '--allowed-tools Bash(unity-editor*)'
+          # Note: Claude does NOT have access to unity-editor CLI due to licensing
+          # Unity operations only work in game-ci actions with proper licensing
           # Inject phase context into Claude's instructions
           additional_context: |
 
@@ -399,18 +398,22 @@ jobs:
             3. Trigger you again with new instructions
 
             ## Critical Rules
-            - **BEFORE PUSHING**: Verify your code compiles using the build verification command
             - Stay focused on THIS phase only
+            - Write code carefully - you cannot verify compilation locally
             - Commit and push your changes when done
             - Use appropriate commit message format (test:/feat:/refactor:/fix:)
-            - DO NOT run unity-editor tests yourself - the workflow does that
+            - DO NOT attempt to run unity-editor commands - you don't have Unity license access
             - DO NOT try to do multiple phases in one iteration
-            - If compilation fails, the workflow will route you to Phase 0 to fix errors
+            - If compilation fails, the workflow will detect it and route you to Phase 0 with error details
 
-            **Build Verification Command (run before every push):**
-            ```bash
-            unity-editor -quit -batchmode -nographics -projectPath . -executeMethod UnityEditor.EditorApplication.Exit -logFile - 2>&1 | grep -iE 'error|exception|fail' || echo "✅ Build verified"
-            ```
+            ## Important Limitation
+            You do NOT have access to unity-editor CLI in your container due to Unity licensing.
+            The workflow uses game-ci actions which have proper licensing to run Unity.
+            This means:
+            - You cannot run tests yourself
+            - You cannot verify builds yourself
+            - The workflow is your ONLY way to verify code compiles and tests pass
+            - If you push code that doesn't compile, Phase 0 will catch it and provide error feedback
 
             The TDD loop is: Push → Tests Run → Phase Determined → Claude Called → Push → ...
 

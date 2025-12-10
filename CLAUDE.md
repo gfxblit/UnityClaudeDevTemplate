@@ -11,6 +11,36 @@ This project uses a **workflow-driven TDD approach** where the GitHub Actions wo
 
 ---
 
+## Phase 0: Fix Compilation Errors
+
+**Workflow Status:** The project failed to compile!
+
+**When This Happens:**
+This is a special phase that takes priority when your code doesn't compile. The workflow detected that the test runner failed because the project has compilation errors.
+
+**Your Task:**
+1. Review the test runner logs from the previous workflow run
+2. Identify the compilation errors (look for "error CS" messages)
+3. Fix all compilation errors in your code
+4. Commit with message: `fix: Resolve compilation errors`
+5. Push your changes
+
+**What Happens Next:**
+- The workflow will run the test runner again
+- If compilation succeeds: Proceeds to the appropriate TDD phase
+- If compilation still fails: You'll be called in Phase 0 again
+
+**Critical Rules:**
+- ❌ DO NOT try to run unity-editor yourself (you don't have license access)
+- ✅ DO check the workflow logs for specific error messages
+- ✅ DO fix errors carefully - you can't verify locally
+- ✅ DO commit and push when you believe errors are fixed
+
+**Why You Can't Verify Locally:**
+Unity licensing only works in game-ci actions, not in your Claude Code container. You must rely on the workflow to verify compilation.
+
+---
+
 ## Phase 1: Requirements Clarification
 
 **Input:** User's feature request
@@ -251,33 +281,34 @@ User creates issue with @claude
 
 ## Important Reminders for Claude
 
-⚠️ **NEVER run tests yourself** - The workflow runs them between iterations
+⚠️ **NEVER run unity-editor commands** - You don't have Unity license access in your container
+⚠️ **NEVER run tests yourself** - The workflow runs them between iterations using game-ci
 ⚠️ **NEVER try to complete multiple phases** - Focus on current phase only
 ⚠️ **NEVER skip writing tests first** - Phase 2 comes before Phase 3
-⚠️ **ALWAYS verify builds before pushing** - Use the build verification command below
+⚠️ **ALWAYS write code carefully** - You cannot verify compilation until you push
 ⚠️ **ALWAYS commit and push your changes** - This triggers the next iteration
-⚠️ **ALWAYS use appropriate commit prefixes** - test:, feat:, refactor:
+⚠️ **ALWAYS use appropriate commit prefixes** - test:, feat:, refactor:, fix:
 ⚠️ **ALWAYS stay focused on the current phase** - The workflow will guide you
 
-### Build Verification (Required Before Pushing)
+### Unity Licensing Limitation
 
-Before committing and pushing, **you MUST verify your code compiles**. The workflow cannot run tests on code that doesn't build!
+**You do NOT have access to unity-editor CLI** in your Claude Code container!
 
-**Quick compilation check:**
-```bash
-unity-editor -quit -batchmode -nographics -projectPath . -executeMethod UnityEditor.EditorApplication.Exit -logFile - 2>&1 | grep -iE 'error|exception|fail' || echo "✅ Build verified"
-```
+Unity licensing only works in the game-ci GitHub Actions. This means:
+- ❌ You **cannot** run tests yourself
+- ❌ You **cannot** verify builds yourself
+- ❌ You **cannot** use any unity-editor commands
+- ✅ The **workflow is your only way** to verify code compiles and tests pass
 
-**Why this matters:**
-- If your code doesn't compile, the test runner will fail
-- The workflow will detect this and ask you to fix compilation errors
-- But it's faster to catch these errors locally before pushing
-- This command only verifies compilation - it does NOT run tests
+**What this means for your workflow:**
+1. Write your code carefully
+2. Commit and push when ready
+3. The workflow runs (with proper Unity license via game-ci)
+4. If compilation fails → You'll be routed to **Phase 0** with error details
+5. Fix the errors and push again
+6. The workflow verifies and continues
 
-**What to do if build fails:**
-1. Fix the compilation errors shown in the output
-2. Re-run the build verification command
-3. Once it passes, commit and push
+**This is by design** - the workflow-driven TDD loop handles all Unity operations for you!
 
 ---
 
@@ -350,17 +381,26 @@ The TDD workflow consists of 5 jobs that run sequentially:
 
 ### Phase Determination Logic
 
+The workflow checks conditions in this priority order:
+
 ```
-Compilation failed → Phase 0 (Fix Compilation)
-No tests exist → Phase 2 (Write Tests)
-Tests exist, all fail → Phase 3 (Implement)
-Tests exist, some fail → Phase 3 (Continue Implementing)
-Tests exist, all pass, last commit not refactor → Phase 4 (Refactor)
-Tests exist, all pass, last commit was refactor → Phase 5 (Verify)
-Phase 5 complete → Create PR
+1. Compilation failed? → Phase 0 (Fix Compilation) [HIGHEST PRIORITY]
+   ↓ (if compilation succeeded)
+2. No tests exist? → Phase 2 (Write Tests)
+   ↓ (if tests exist)
+3. All tests fail? → Phase 3 (Implement)
+   ↓ (if some tests pass)
+4. Some tests fail? → Phase 3 (Continue Implementing)
+   ↓ (if all tests pass)
+5. Last commit was refactor? → Phase 5 (Verify)
+   ↓ (if last commit was not refactor)
+6. All tests pass? → Phase 4 (Refactor)
+   ↓ (if Phase 5 complete)
+7. Create PR
 ```
 
-**Phase 0 (Fix Compilation)** is a special phase that takes priority when the project fails to compile. You must fix all compilation errors before the workflow can proceed to run tests.
+**Why Phase 0 is First:**
+Compilation must succeed before tests can run. If the project doesn't compile, the workflow cannot determine test state, so Phase 0 takes absolute priority. You cannot verify compilation yourself due to Unity licensing - only the workflow (via game-ci) can do this.
 
 ### Environment
 
@@ -377,7 +417,20 @@ Phase 5 complete → Create PR
 ### Key Insights
 
 1. **The workflow IS the TDD loop** - Tests → Phase → Code → Tests → ...
-2. **Claude never runs tests** - The workflow does it between iterations
-3. **Each iteration is one phase** - Claude focuses on single phase only
-4. **Automatic continuation** - Workflow loops until feature complete
-5. **Test-driven phase detection** - Test state determines what to do next
+2. **Claude never runs Unity commands** - No unity-editor access due to licensing
+3. **Only workflow verifies code** - game-ci actions have Unity license, Claude doesn't
+4. **Phase 0 catches compilation errors** - Workflow detects and routes back to Claude
+5. **Each iteration is one phase** - Claude focuses on single phase only
+6. **Automatic continuation** - Workflow loops until feature complete
+7. **Test-driven phase detection** - Test state determines what to do next
+
+### Why Unity Licensing Matters
+
+Unity requires a license to run any editor operations (building, testing, etc.). In this workflow:
+- ✅ **game-ci actions**: Have proper Unity licensing configured
+- ❌ **Claude Code container**: Does NOT have Unity licensing
+
+This is why Claude cannot run unity-editor commands - it would fail with licensing errors. The workflow architecture works around this by:
+1. Claude writes code (no Unity needed)
+2. Workflow runs game-ci actions (has Unity license)
+3. Workflow detects results and tells Claude what to do next
