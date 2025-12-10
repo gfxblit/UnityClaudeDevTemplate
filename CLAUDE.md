@@ -38,7 +38,10 @@ This workflow enforces strict Test-Driven Development (TDD) for Unity features u
    - Use descriptive test names: `When[Condition]_Should[ExpectedBehavior]`
    - Test edge cases and error conditions
    - Tests MUST fail initially (no implementation exists yet)
-3. Run tests to confirm they fail
+3. **Run tests using unity-editor CLI to confirm they fail:**
+   ```bash
+   unity-editor -runTests -batchmode -nographics -projectPath . -testPlatform PlayMode -logFile -
+   ```
 4. Verify failure messages are clear and helpful
 
 **Example Test Structure:**
@@ -68,7 +71,10 @@ public IEnumerator WhenPlayerCollectsItem_ShouldIncreaseScore()
 1. Write the **simplest possible code** to make ONE test pass
 2. No premature optimization or extra features
 3. Hard-code values if necessary (will refactor later)
-4. Run tests after each change
+4. **Run tests after each change using unity-editor CLI:**
+   ```bash
+   unity-editor -runTests -batchmode -nographics -projectPath . -testPlatform PlayMode -logFile -
+   ```
 5. If test passes, commit that change
 6. Move to next failing test
 7. Repeat until ALL tests pass
@@ -99,7 +105,10 @@ public IEnumerator WhenPlayerCollectsItem_ShouldIncreaseScore()
    - **DRY:** No unnecessary duplication
    - **SOLID:** Follow good design principles
 3. After EACH refactor:
-   - Run all tests
+   - **Run all tests using unity-editor CLI:**
+     ```bash
+     unity-editor -runTests -batchmode -nographics -projectPath . -testPlatform PlayMode -logFile -
+     ```
    - Ensure all tests still pass
    - If tests fail, revert the refactor
 4. Commit each successful refactor separately
@@ -114,7 +123,10 @@ public IEnumerator WhenPlayerCollectsItem_ShouldIncreaseScore()
 ## Phase 5: Final Verification
 
 **Process:**
-1. Run complete test suite one final time
+1. **Run complete test suite one final time using unity-editor CLI:**
+   ```bash
+   unity-editor -runTests -batchmode -nographics -projectPath . -testPlatform PlayMode -logFile -
+   ```
 2. Verify all tests pass
 3. Review test coverage:
    - All requirements tested?
@@ -188,7 +200,7 @@ Use this checklist for each feature:
 ⚠️ **NEVER implement without failing tests**
 ⚠️ **NEVER refactor before tests pass**
 ⚠️ **NEVER commit failing tests**
-⚠️ **ALWAYS run tests after changes**
+⚠️ **ALWAYS run tests after changes using unity-editor CLI**
 ⚠️ **ALWAYS clarify unclear requirements before coding**
 
 ---
@@ -222,3 +234,25 @@ public class FeatureNameTests
 - Clean up test objects in `[TearDown]`
 - Use `LogAssert` for testing Debug.Log calls
 - Leverage `yield return new WaitForSeconds()` for timing tests
+
+---
+
+## Running Tests in GitHub Actions
+
+When working in the Claude Code GitHub Action environment, you have access to the `unity-editor` CLI command to run tests directly.
+
+**Command to run PlayMode tests:**
+```bash
+unity-editor -runTests -batchmode -nographics -projectPath . -testPlatform PlayMode -logFile -
+```
+
+**Environment Variables Available:**
+- `UNITY_LICENSE` - License file content (automatically configured)
+- `UNITY_EMAIL` - Unity account email (automatically configured)
+- `UNITY_PASSWORD` - Unity account password (automatically configured)
+
+**Notes:**
+- The container already has Unity activated with the project's credentials
+- Tests run in headless mode (no graphics)
+- Results output to stdout via `-logFile -`
+- Exit code indicates test success (0) or failure (non-zero)
