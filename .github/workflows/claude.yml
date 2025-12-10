@@ -11,12 +11,43 @@ on:
     types: [submitted]
 
 jobs:
-  claude:
+  activate-unity:
     if: |
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    runs-on: ubuntu-latest
+    outputs:
+      unity-license: ${{ steps.export-license.outputs.license }}
+    steps:
+      - name: Activate Unity License
+        uses: game-ci/unity-activate@v2
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+
+      - name: Export activated license
+        id: export-license
+        run: |
+          # Read the activated license file
+          LICENSE_CONTENT=$(cat /home/runner/.local/share/unity3d/Unity/Unity_lic.ulf)
+
+          # Mask the license content BEFORE any output
+          echo "::add-mask::$LICENSE_CONTENT"
+
+          # Base64 encode for safe transport (not for security, already masked)
+          LICENSE_B64=$(echo "$LICENSE_CONTENT" | base64 -w 0)
+
+          # Mask the base64 version too
+          echo "::add-mask::$LICENSE_B64"
+
+          # Set as output (will be masked in logs)
+          echo "license=$LICENSE_B64" >> $GITHUB_OUTPUT
+
+  claude:
+    needs: activate-unity
     runs-on: ubuntu-latest
     container:
       image: unityci/editor:ubuntu-6000.0.31f1-base-3
@@ -35,15 +66,15 @@ jobs:
       - name: Configure Git safe directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Activate Unity License
+      - name: Install Unity License
         run: |
           # Create Unity license directory
           mkdir -p /root/.local/share/unity3d/Unity
 
-          # Write license file
-          echo "$UNITY_LICENSE" | tr -d '\r' > /root/.local/share/unity3d/Unity/Unity_lic.ulf
+          # Decode and write the license file
+          echo "${{ needs.activate-unity.outputs.unity-license }}" | base64 -d > /root/.local/share/unity3d/Unity/Unity_lic.ulf
 
-          # Verify license file was created
+          # Verify license file was created (don't cat it!)
           ls -la /root/.local/share/unity3d/Unity/
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
