@@ -254,9 +254,30 @@ User creates issue with @claude
 ⚠️ **NEVER run tests yourself** - The workflow runs them between iterations
 ⚠️ **NEVER try to complete multiple phases** - Focus on current phase only
 ⚠️ **NEVER skip writing tests first** - Phase 2 comes before Phase 3
+⚠️ **ALWAYS verify builds before pushing** - Use the build verification command below
 ⚠️ **ALWAYS commit and push your changes** - This triggers the next iteration
 ⚠️ **ALWAYS use appropriate commit prefixes** - test:, feat:, refactor:
 ⚠️ **ALWAYS stay focused on the current phase** - The workflow will guide you
+
+### Build Verification (Required Before Pushing)
+
+Before committing and pushing, **you MUST verify your code compiles**. The workflow cannot run tests on code that doesn't build!
+
+**Quick compilation check:**
+```bash
+unity-editor -quit -batchmode -nographics -projectPath . -executeMethod UnityEditor.EditorApplication.Exit -logFile - 2>&1 | grep -iE 'error|exception|fail' || echo "✅ Build verified"
+```
+
+**Why this matters:**
+- If your code doesn't compile, the test runner will fail
+- The workflow will detect this and ask you to fix compilation errors
+- But it's faster to catch these errors locally before pushing
+- This command only verifies compilation - it does NOT run tests
+
+**What to do if build fails:**
+1. Fix the compilation errors shown in the output
+2. Re-run the build verification command
+3. Once it passes, commit and push
 
 ---
 
@@ -300,6 +321,7 @@ The TDD workflow consists of 5 jobs that run sequentially:
 
 1. **run-tests**: Uses `game-ci/unity-test-runner` to run PlayMode tests
    - Skipped on initial issue creation (no tests yet)
+   - Detects compilation failures (no test results generated)
    - Outputs test counts and results
    - Continues even if tests fail (expected in TDD!)
 
@@ -329,6 +351,7 @@ The TDD workflow consists of 5 jobs that run sequentially:
 ### Phase Determination Logic
 
 ```
+Compilation failed → Phase 0 (Fix Compilation)
 No tests exist → Phase 2 (Write Tests)
 Tests exist, all fail → Phase 3 (Implement)
 Tests exist, some fail → Phase 3 (Continue Implementing)
@@ -336,6 +359,8 @@ Tests exist, all pass, last commit not refactor → Phase 4 (Refactor)
 Tests exist, all pass, last commit was refactor → Phase 5 (Verify)
 Phase 5 complete → Create PR
 ```
+
+**Phase 0 (Fix Compilation)** is a special phase that takes priority when the project fails to compile. You must fix all compilation errors before the workflow can proceed to run tests.
 
 ### Environment
 

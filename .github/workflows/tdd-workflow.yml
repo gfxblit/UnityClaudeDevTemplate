@@ -27,6 +27,7 @@ jobs:
       !(github.event_name == 'issues' && github.event.action == 'opened')
     outputs:
       tests_exist: ${{ steps.check-tests.outputs.exist }}
+      compilation_failed: ${{ steps.check-compilation.outputs.failed }}
       total_tests: ${{ steps.parse-results.outputs.total }}
       passed_tests: ${{ steps.parse-results.outputs.passed }}
       failed_tests: ${{ steps.parse-results.outputs.failed }}
@@ -74,6 +75,19 @@ jobs:
           artifactsPath: test-results
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           checkName: TDD Test Results
+
+      - name: Check for compilation errors
+        id: check-compilation
+        if: steps.check-tests.outputs.exist == 'true' && always()
+        run: |
+          # Check if test runner failed and no test results were generated (likely compilation error)
+          if [ "${{ steps.run-tests.outcome }}" == "failure" ] && [ ! -f "test-results/PlayMode-results.xml" ]; then
+            echo "failed=true" >> $GITHUB_OUTPUT
+            echo "❌ Compilation likely failed - no test results generated"
+          else
+            echo "failed=false" >> $GITHUB_OUTPUT
+            echo "✅ No compilation errors detected"
+          fi
 
       - name: Parse test results
         id: parse-results
@@ -126,6 +140,7 @@ jobs:
         id: determine
         env:
           TESTS_EXIST: ${{ needs.run-tests.outputs.tests_exist }}
+          COMPILATION_FAILED: ${{ needs.run-tests.outputs.compilation_failed }}
           TOTAL_TESTS: ${{ needs.run-tests.outputs.total_tests }}
           PASSED_TESTS: ${{ needs.run-tests.outputs.passed_tests }}
           FAILED_TESTS: ${{ needs.run-tests.outputs.failed_tests }}
@@ -133,14 +148,25 @@ jobs:
         run: |
           echo "🔍 Analyzing current state..."
           echo "Tests exist: $TESTS_EXIST"
+          echo "Compilation failed: $COMPILATION_FAILED"
           echo "Total: $TOTAL_TESTS, Passed: $PASSED_TESTS, Failed: $FAILED_TESTS"
 
           # Check last commit message to understand what was just done
           last_commit_msg=$(git log -1 --pretty=%B 2>/dev/null || echo "")
           echo "Last commit: $last_commit_msg"
 
+          # PRIORITY: Check for compilation failures first
+          if [ "$COMPILATION_FAILED" = "true" ]; then
+            # Compilation failed → Fix compilation errors
+            echo "phase=0" >> $GITHUB_OUTPUT
+            echo "phase_name=Fix Compilation Errors" >> $GITHUB_OUTPUT
+            echo "phase_instruction=⚠️ The project failed to compile! Fix all compilation errors before tests can run. Check the test runner logs for error details. You should verify your code compiles locally using: unity-editor -quit -batchmode -nographics -projectPath . -executeMethod UnityEditor.EditorApplication.Exit -logFile - 2>&1 | grep -i 'error\\|exception'" >> $GITHUB_OUTPUT
+            echo "should_run_claude=true" >> $GITHUB_OUTPUT
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+            echo "🔥 Compilation Failed - Must Fix Errors"
+
           # Determine phase based on state
-          if [ "$TESTS_EXIST" != "true" ]; then
+          elif [ "$TESTS_EXIST" != "true" ]; then
             # No tests exist → Write failing tests (Phase 2)
             echo "phase=2" >> $GITHUB_OUTPUT
             echo "phase_name=Write Failing Tests" >> $GITHUB_OUTPUT
@@ -321,8 +347,12 @@ jobs:
           - The workflow will automatically run tests again and continue to the next phase
 
           ### Available Commands
-          - Run tests: `unity-editor -runTests -batchmode -nographics -projectPath . -testPlatform PlayMode -logFile -`
-          - Check test results: Results will be in the next workflow run
+          - **REQUIRED before pushing**: Verify build compiles:
+            ```bash
+            unity-editor -quit -batchmode -nographics -projectPath . -executeMethod UnityEditor.EditorApplication.Exit -logFile - 2>&1 | grep -iE 'error|exception|fail' || echo "✅ Build verified"
+            ```
+          - Do NOT run: `unity-editor -runTests` (the workflow does this)
+          - Test results: Will be provided in the next workflow run
 
           EOF
 
@@ -369,11 +399,18 @@ jobs:
             3. Trigger you again with new instructions
 
             ## Critical Rules
+            - **BEFORE PUSHING**: Verify your code compiles using the build verification command
             - Stay focused on THIS phase only
             - Commit and push your changes when done
-            - Use appropriate commit message format (test:/feat:/refactor:)
+            - Use appropriate commit message format (test:/feat:/refactor:/fix:)
             - DO NOT run unity-editor tests yourself - the workflow does that
             - DO NOT try to do multiple phases in one iteration
+            - If compilation fails, the workflow will route you to Phase 0 to fix errors
+
+            **Build Verification Command (run before every push):**
+            ```bash
+            unity-editor -quit -batchmode -nographics -projectPath . -executeMethod UnityEditor.EditorApplication.Exit -logFile - 2>&1 | grep -iE 'error|exception|fail' || echo "✅ Build verified"
+            ```
 
             The TDD loop is: Push → Tests Run → Phase Determined → Claude Called → Push → ...
 
