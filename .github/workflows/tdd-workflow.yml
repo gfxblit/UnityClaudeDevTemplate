@@ -268,7 +268,7 @@ jobs:
   # Job 3: Run Claude with phase-specific context
   claude-code:
     name: Claude Code (Phase ${{ needs.determine-phase.outputs.phase }})
-    needs: [run-tests, determine-phase]
+    needs: [determine-phase]
     if: needs.determine-phase.outputs.should_run_claude == 'true'
     runs-on: ubuntu-latest
     container:
