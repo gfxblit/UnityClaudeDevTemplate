@@ -467,6 +467,9 @@ jobs:
       needs.determine-phase.outputs.should_continue == 'true' &&
       needs.determine-phase.outputs.phase != '5'
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
     steps:
       - name: Wait for changes to be pushed
         run: |
