@@ -145,18 +145,30 @@ jobs:
           PASSED_TESTS: ${{ needs.run-tests.outputs.passed_tests }}
           FAILED_TESTS: ${{ needs.run-tests.outputs.failed_tests }}
           TEST_OUTCOME: ${{ needs.run-tests.outputs.test_outcome }}
+          IS_INITIAL_ISSUE: ${{ github.event_name == 'issues' && github.event.action == 'opened' }}
         run: |
           echo "🔍 Analyzing current state..."
           echo "Tests exist: $TESTS_EXIST"
           echo "Compilation failed: $COMPILATION_FAILED"
           echo "Total: $TOTAL_TESTS, Passed: $PASSED_TESTS, Failed: $FAILED_TESTS"
+          echo "Initial issue: $IS_INITIAL_ISSUE"
 
           # Check last commit message to understand what was just done
           last_commit_msg=$(git log -1 --pretty=%B 2>/dev/null || echo "")
           echo "Last commit: $last_commit_msg"
 
+          # BOOTSTRAP: Handle initial issue creation (run-tests was skipped)
+          if [ "$IS_INITIAL_ISSUE" = "true" ]; then
+            # Initial issue creation → Start with Phase 2 (Write Tests)
+            echo "phase=2" >> $GITHUB_OUTPUT
+            echo "phase_name=Write Failing Tests" >> $GITHUB_OUTPUT
+            echo "phase_instruction=Write PlayMode tests for all requirements. Tests should fail because no implementation exists yet." >> $GITHUB_OUTPUT
+            echo "should_run_claude=true" >> $GITHUB_OUTPUT
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+            echo "🎬 Bootstrap: Initial issue - Write Failing Tests"
+
           # PRIORITY: Check for compilation failures first
-          if [ "$COMPILATION_FAILED" = "true" ]; then
+          elif [ "$COMPILATION_FAILED" = "true" ]; then
             # Compilation failed → Fix compilation errors
             echo "phase=0" >> $GITHUB_OUTPUT
             echo "phase_name=Fix Compilation Errors" >> $GITHUB_OUTPUT
