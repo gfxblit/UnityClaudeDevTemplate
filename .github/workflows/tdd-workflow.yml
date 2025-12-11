@@ -202,9 +202,18 @@ jobs:
             echo "should_continue=true" >> $GITHUB_OUTPUT
             echo "🔨 Phase 3: Continue Implementation ($PASSED_TESTS/$TOTAL_TESTS passing)"
 
-          elif [ "$PASSED_TESTS" = "$TOTAL_TESTS" ]; then
+          elif [ "$PASSED_TESTS" = "$TOTAL_TESTS" ] && [ "$PASSED_TESTS" -gt 0 ]; then
             # All tests pass → Check if we need to refactor or if already refactored
-            if echo "$last_commit_msg" | grep -qiE "^(refactor|style|chore):"; then
+            # CRITICAL: Check if we just wrote tests - they should FAIL in TDD!
+            if echo "$last_commit_msg" | grep -qiE "^test:"; then
+              # Just wrote tests but they all pass → This violates TDD!
+              echo "phase=2" >> $GITHUB_OUTPUT
+              echo "phase_name=Fix Tests - Must Fail First" >> $GITHUB_OUTPUT
+              echo "phase_instruction=⚠️ TDD VIOLATION: You just wrote tests but they all pass! In TDD, tests must FAIL before you write implementation. Either: 1) Remove the implementation code you accidentally wrote, or 2) Fix the tests to properly verify the feature (they should fail because the feature doesn't exist yet). Tests that pass immediately aren't testing anything!" >> $GITHUB_OUTPUT
+              echo "should_run_claude=true" >> $GITHUB_OUTPUT
+              echo "should_continue=true" >> $GITHUB_OUTPUT
+              echo "⚠️ TDD Violation: Tests must fail first!"
+            elif echo "$last_commit_msg" | grep -qiE "^(refactor|style|chore):"; then
               # Just refactored → Final verification (Phase 5)
               echo "phase=5" >> $GITHUB_OUTPUT
               echo "phase_name=Final Verification" >> $GITHUB_OUTPUT
