@@ -1,0 +1,104 @@
+name: Test Unity Manual Activation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-unity-direct:
+    name: Test Manual Unity Activation + Direct Editor Commands
+    runs-on: ubuntu-latest
+    container:
+      image: unityci/editor:ubuntu-6000.0.31f1-base-3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Manually activate Unity license
+        run: |
+          echo "📝 Activating Unity license manually..."
+          mkdir -p /root/.local/share/unity3d/Unity
+          echo "$UNITY_LICENSE" | tr -d '\r' > /root/.local/share/unity3d/Unity/Unity_lic.ulf
+
+          echo "✅ License file created"
+          ls -la /root/.local/share/unity3d/Unity/
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+
+      - name: Test Unity editor command directly
+        id: test-unity
+        run: |
+          echo "🎮 Attempting to run Unity editor directly..."
+
+          # Try to run Unity in batch mode to verify activation
+          unity-editor \
+            -batchmode \
+            -nographics \
+            -projectPath . \
+            -logFile - \
+            -quit
+
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+
+      - name: Try running tests directly
+        if: steps.test-unity.outputs.exit_code == '0'
+        run: |
+          echo "🧪 Unity editor works! Now trying to run tests..."
+
+          unity-editor \
+            -batchmode \
+            -nographics \
+            -projectPath . \
+            -runTests \
+            -testPlatform PlayMode \
+            -testResults test-results.xml \
+            -logFile - \
+            -quit
+        continue-on-error: true
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+
+      - name: Check test results
+        if: steps.test-unity.outputs.exit_code == '0'
+        run: |
+          echo "📊 Checking if test results were generated..."
+
+          if [ -f "test-results.xml" ]; then
+            echo "✅ Test results file exists!"
+            echo "Content preview:"
+            head -20 test-results.xml
+          else
+            echo "❌ No test results file found"
+            echo "Files in directory:"
+            ls -la
+          fi
+
+      - name: Report results
+        if: always()
+        run: |
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.test-unity.outputs.exit_code }}" = "0" ]; then
+            echo "✅ **Unity editor can be run directly after manual activation!**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "This means we can simplify the workflow by:" >> $GITHUB_STEP_SUMMARY
+            echo "1. Activating Unity once at the start" >> $GITHUB_STEP_SUMMARY
+            echo "2. Running unity-editor commands directly in a loop" >> $GITHUB_STEP_SUMMARY
+            echo "3. No need for multiple workflow runs or game-ci action per iteration" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Unity editor cannot be run directly**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Exit code: ${{ steps.test-unity.outputs.exit_code }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "We must continue using game-ci/unity-test-runner action" >> $GITHUB_STEP_SUMMARY
+          fi
