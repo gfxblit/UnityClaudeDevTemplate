@@ -269,7 +269,7 @@ jobs:
   claude-code:
     name: Claude Code (Phase ${{ needs.determine-phase.outputs.phase }})
     needs: [determine-phase]
-    if: needs.determine-phase.outputs.should_run_claude == 'true'
+    if: always() && needs.determine-phase.outputs.should_run_claude == 'true'
     runs-on: ubuntu-latest
     container:
       image: unityci/editor:ubuntu-6000.0.31f1-base-3
