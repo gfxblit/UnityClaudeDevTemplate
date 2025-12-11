@@ -394,7 +394,7 @@ jobs:
           # Note: Claude does NOT have access to unity-editor CLI due to licensing
           # Unity operations only work in game-ci actions with proper licensing
           # Inject phase context into Claude's instructions
-          additional_context: |
+          prompt: |
 
             # WORKFLOW-DRIVEN TDD MODE ACTIVE
 
