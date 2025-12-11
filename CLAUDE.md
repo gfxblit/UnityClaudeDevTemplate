@@ -9,6 +9,30 @@ This project uses a **workflow-driven TDD approach** where the GitHub Actions wo
 
 **You don't run tests manually - the workflow does it for you between iterations.**
 
+## Accessing Test Results
+
+The workflow downloads test results from the previous iteration to `test-results/PlayMode-results.xml`. You should read this file to understand:
+- Which tests are failing
+- What error messages tests produced
+- Compilation errors (if Phase 0)
+- Test pass/fail counts
+
+**Common commands:**
+```bash
+# View full test results
+cat test-results/PlayMode-results.xml
+
+# Check test summary
+grep -E '(total|passed|failed)=' test-results/PlayMode-results.xml
+
+# Find failed tests
+grep -A 5 'result="Failed"' test-results/PlayMode-results.xml
+
+# Check workflow logs for more details
+gh run list --limit 1
+gh run view --log
+```
+
 ---
 
 ## Phase 0: Fix Compilation Errors
@@ -19,11 +43,22 @@ This project uses a **workflow-driven TDD approach** where the GitHub Actions wo
 This is a special phase that takes priority when your code doesn't compile. The workflow detected that the test runner failed because the project has compilation errors.
 
 **Your Task:**
-1. Review the test runner logs from the previous workflow run
-2. Identify the compilation errors (look for "error CS" messages)
-3. Fix all compilation errors in your code
-4. Commit with message: `fix: Resolve compilation errors`
-5. Push your changes
+1. **Check test results** - If available, read `test-results/PlayMode-results.xml` for compilation error details
+2. **Review workflow logs** - Use `gh run view --log` to see the full test runner output from the previous iteration
+3. Identify the compilation errors (look for "error CS" messages)
+4. Fix all compilation errors in your code
+5. Commit with message: `fix: Resolve compilation errors`
+6. Push your changes
+
+**How to Check Test Results:**
+```bash
+# If test results were downloaded by the workflow
+cat test-results/PlayMode-results.xml
+
+# Or check the latest workflow run logs
+gh run list --limit 1
+gh run view <run-id> --log | grep -A 10 "error CS"
+```
 
 **What Happens Next:**
 - The workflow will run the test runner again
@@ -79,6 +114,16 @@ Unity licensing only works in game-ci actions, not in your Claude Code container
 3. Commit with message: `test: Add PlayMode tests for [feature]`
 4. Push your changes
 
+**Verifying Tests Will Fail:**
+After you write tests, the workflow will run them. You can check if they exist:
+```bash
+# See what test files exist
+ls -la Assets/Tests/PlayMode/
+
+# Preview test structure (but don't run them - workflow does that!)
+cat Assets/Tests/PlayMode/YourTestFile.cs
+```
+
 **Example Test Structure:**
 ```csharp
 [UnityTest]
@@ -111,11 +156,22 @@ public IEnumerator WhenPlayerCollectsItem_ShouldIncreaseScore()
 **Workflow Status:** Tests exist and some/all are failing
 
 **Your Task:**
-1. Write the **simplest possible code** to make failing tests pass
-2. Focus on making tests pass, not writing perfect code
-3. Hard-code values if necessary (will refactor later)
-4. Commit with message: `feat: Implement [specific functionality]`
-5. Push your changes
+1. **Review test failures** - Check `test-results/PlayMode-results.xml` to see which tests are failing and why
+2. Write the **simplest possible code** to make failing tests pass
+3. Focus on making tests pass, not writing perfect code
+4. Hard-code values if necessary (will refactor later)
+5. Commit with message: `feat: Implement [specific functionality]`
+6. Push your changes
+
+**How to Understand Test Failures:**
+```bash
+# Read the test results XML to see failures
+cat test-results/PlayMode-results.xml
+
+# Look for <test-case> elements with result="Failed"
+# The failure messages will show what went wrong
+grep -A 5 'result="Failed"' test-results/PlayMode-results.xml
+```
 
 **What Happens Next:**
 - The workflow will run tests automatically
@@ -137,16 +193,25 @@ public IEnumerator WhenPlayerCollectsItem_ShouldIncreaseScore()
 **Workflow Status:** All tests pass! Time to improve code quality
 
 **Your Task:**
-1. Review the implementation for:
+1. **Verify all tests pass** - Check `test-results/PlayMode-results.xml` to confirm 100% pass rate
+2. Review the implementation for:
    - Code duplication
    - Hard-coded values that should be parameterized
    - Long methods that should be split
    - Complex logic that needs simplification
    - Missing modular structure
-2. Refactor to achieve:
+3. Refactor to achieve:
    - **Simple:** Easy to understand and maintain
    - **Modular:** Clear separation of concerns
    - **DRY:** No unnecessary duplication
+
+**Checking Test Status Before Refactoring:**
+```bash
+# Confirm all tests passed before you start refactoring
+grep -E '(total|passed|failed)=' test-results/PlayMode-results.xml
+
+# Should show: passed=X total=X failed=0
+```
    - **SOLID:** Follow good design principles
 3. Commit with message: `refactor: [description of improvement]`
 4. Push your changes
