@@ -41,7 +41,11 @@ jobs:
 
       - name: Activate Unity License
         run: |
-          # Extract and decode DeveloperData from UNITY_LICENSE XML
+          # Randomize machine ID for personal license (matching game-ci behavior)
+          echo "Randomizing machine ID for personal license activation"
+          dbus-uuidgen > /etc/machine-id && mkdir -p /var/lib/dbus/ && ln -sf /etc/machine-id /var/lib/dbus/machine-id
+
+          # Extract base64 data from UNITY_LICENSE XML
           ENCODED_DATA=$(echo "$UNITY_LICENSE" | grep -oP '(?<=<DeveloperData Value=")[^"]+' || echo "")
 
           if [ -z "$ENCODED_DATA" ]; then
@@ -49,11 +53,12 @@ jobs:
             exit 1
           fi
 
-          # Decode base64 and extract serial (F-XXXX-XXXX-XXXX-XXXX-XXXX format, case-insensitive)
-          SERIAL=$(echo "$ENCODED_DATA" | base64 -d | grep -oP 'F-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}' | head -1 || echo "")
+          # Decode base64 and skip first 4 bytes (matching game-ci implementation)
+          # The first 4 bytes are garbage values that need to be discarded
+          UNITY_SERIAL=$(echo "$ENCODED_DATA" | base64 -d | tail -c +5)
 
-          if [ -z "$SERIAL" ]; then
-            echo "❌ Failed to extract serial from decoded DeveloperData"
+          if [ -z "$UNITY_SERIAL" ]; then
+            echo "❌ Failed to extract serial from DeveloperData"
             exit 1
           fi
 
@@ -62,9 +67,10 @@ jobs:
           # Activate Unity with credentials (generates machine-specific .ulf)
           echo "Activating Unity license..."
           unity-editor -batchmode -quit \
-            -serial "$SERIAL" \
+            -serial "$UNITY_SERIAL" \
             -username "$UNITY_EMAIL" \
             -password "$UNITY_PASSWORD" \
+            -projectPath "/BlankProject" \
             -logFile /dev/stdout || true
 
           # Verify license file was created
