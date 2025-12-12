@@ -11,88 +11,91 @@ on:
     types: [submitted]
 
 jobs:
-  activate-unity:
+  claude:
     if: |
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
-    outputs:
-      unity-license: ${{ steps.export-license.outputs.license }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Activate Unity License
-        uses: game-ci/unity-activate@v2
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-
-      - name: Export activated license
-        id: export-license
-        run: |
-          # The license file is created by unity-activate in the GitHub Actions temp home directory
-          # This is volume-mounted to the container as /github/home
-          GITHUB_HOME="/home/runner/work/_temp/_github_home"
-          LICENSE_FILE="$GITHUB_HOME/.local/share/unity3d/Unity/Unity_lic.ulf"
-
-          if [ ! -f "$LICENSE_FILE" ]; then
-            echo "Error: License file not found at $LICENSE_FILE"
-            echo "Searching for license files..."
-            find /home/runner/work/_temp -name "Unity_lic.ulf" -o -name "*.ulf" 2>/dev/null || true
-            exit 1
-          fi
-
-          # Read the activated license file
-          LICENSE_CONTENT=$(cat "$LICENSE_FILE")
-
-          # Mask the license content BEFORE any output
-          echo "::add-mask::$LICENSE_CONTENT"
-
-          # Base64 encode for safe transport (not for security, already masked)
-          LICENSE_B64=$(echo "$LICENSE_CONTENT" | base64 -w 0)
-
-          # Mask the base64 version too
-          echo "::add-mask::$LICENSE_B64"
-
-          # Set as output (will be masked in logs)
-          echo "license=$LICENSE_B64" >> $GITHUB_OUTPUT
-
-  claude:
-    needs: activate-unity
-    runs-on: ubuntu-latest
     container:
       image: unityci/editor:ubuntu-6000.0.31f1-base-3
     permissions:
-      contents: read
-      pull-requests: read
-      issues: read
+      contents: write
+      pull-requests: write
+      issues: write
       id-token: write
-      actions: read # Required for Claude to read CI results on PRs
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Configure Git safe directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Install Unity License
+      - name: Activate Unity License
         run: |
-          # Create Unity license directory
-          mkdir -p /root/.local/share/unity3d/Unity
+          # Create activation directory
+          ACTIVATE_LICENSE_PATH="$GITHUB_WORKSPACE/_activate-license"
+          mkdir -p "$ACTIVATE_LICENSE_PATH"
+          cd "$ACTIVATE_LICENSE_PATH"
 
-          # Decode and write the license file
-          echo "${{ needs.activate-unity.outputs.unity-license }}" | base64 -d > /root/.local/share/unity3d/Unity/Unity_lic.ulf
+          echo "Requesting activation (personal license)"
 
-          # Verify license file was created (don't cat it!)
-          ls -la /root/.local/share/unity3d/Unity/
+          # Set the license file path
+          FILE_PATH=UnityLicenseFile.ulf
+
+          # Copy license file from secret and remove carriage returns
+          echo "$UNITY_LICENSE" | tr -d '\r' > $FILE_PATH
+
+          # Activate license - this generates the .ulf in /root/.local/share/unity3d/Unity/
+          ACTIVATION_OUTPUT=$(unity-editor \
+              -logFile /dev/stdout \
+              -quit \
+              -manualLicenseFile $FILE_PATH)
+
+          # Store the exit code
+          UNITY_EXIT_CODE=$?
+
+          # The exit code for personal activation is always 1;
+          # Determine whether activation was successful by checking output
+          ACTIVATION_SUCCESSFUL=$(echo "$ACTIVATION_OUTPUT" | grep 'Next license update check is after' | wc -l)
+
+          # Set exit code to 0 if activation was successful
+          if [[ $ACTIVATION_SUCCESSFUL -eq 1 ]]; then
+            UNITY_EXIT_CODE=0
+          fi
+
+          # Remove input license file (cleanup)
+          rm -f $FILE_PATH
+
+          # Display result
+          if [ $UNITY_EXIT_CODE -eq 0 ]; then
+            echo "Activation complete."
+            # Verify the license was created
+            if [ -f "/root/.local/share/unity3d/Unity/Unity_lic.ulf" ]; then
+              echo "License file created successfully"
+              ls -lh /root/.local/share/unity3d/Unity/Unity_lic.ulf
+            else
+              echo "ERROR: License file was not created at expected location"
+              exit 1
+            fi
+          else
+            echo "###########################"
+            echo "#         Failure         #"
+            echo "###########################"
+            echo ""
+            echo "License activation failed."
+            echo "Exit code was: $UNITY_EXIT_CODE"
+            echo ""
+            echo "Activation output:"
+            echo "$ACTIVATION_OUTPUT"
+            exit $UNITY_EXIT_CODE
+          fi
+
+          cd "$GITHUB_WORKSPACE"
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
 
