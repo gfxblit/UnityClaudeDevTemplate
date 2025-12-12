@@ -79,3 +79,7 @@ crashlytics-build.properties
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Environment files with secrets
+.env
+.claude/settings.local.json
