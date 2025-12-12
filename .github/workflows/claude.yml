@@ -11,13 +11,46 @@ on:
     types: [submitted]
 
 jobs:
-  claude:
+  activate-unity:
     if: |
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
+    outputs:
+      unity-license: ${{ steps.export-license.outputs.license }}
+    steps:
+      - name: Activate Unity License
+        uses: game-ci/unity-activate@v2
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+
+      - name: Export activated license
+        id: export-license
+        run: |
+          # Read the activated license file
+          LICENSE_CONTENT=$(cat /home/runner/.local/share/unity3d/Unity/Unity_lic.ulf)
+
+          # Mask the license content BEFORE any output
+          echo "::add-mask::$LICENSE_CONTENT"
+
+          # Base64 encode for safe transport (not for security, already masked)
+          LICENSE_B64=$(echo "$LICENSE_CONTENT" | base64 -w 0)
+
+          # Mask the base64 version too
+          echo "::add-mask::$LICENSE_B64"
+
+          # Set as output (will be masked in logs)
+          echo "license=$LICENSE_B64" >> $GITHUB_OUTPUT
+
+  claude:
+    needs: activate-unity
+    runs-on: ubuntu-latest
+    container:
+      image: unityci/editor:ubuntu-6000.0.31f1-base-3
     permissions:
       contents: read
       pull-requests: read
@@ -30,9 +63,29 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install Unity License
+        run: |
+          # Create Unity license directory
+          mkdir -p /root/.local/share/unity3d/Unity
+
+          # Decode and write the license file
+          echo "${{ needs.activate-unity.outputs.unity-license }}" | base64 -d > /root/.local/share/unity3d/Unity/Unity_lic.ulf
+
+          # Verify license file was created (don't cat it!)
+          ls -la /root/.local/share/unity3d/Unity/
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
@@ -40,11 +93,8 @@ jobs:
           additional_permissions: |
             actions: read
 
-          # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
-          # prompt: 'Update the pull request description to include a summary of changes.'
+          # Allow Claude to use unity-editor CLI for running tests
+          claude_args: '--allowed-tools Bash(unity-editor*)'
 
-          # Optional: Add claude_args to customize behavior and configuration
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
+          # Optional: See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://docs.claude.com/en/docs/claude-code/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr:*)'
-
