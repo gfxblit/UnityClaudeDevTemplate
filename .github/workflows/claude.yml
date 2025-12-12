@@ -39,20 +39,32 @@ jobs:
       - name: Configure Git safe directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Install Unity License
+      - name: Activate Unity License
         run: |
-          # Create license directory
-          mkdir -p /root/.local/share/unity3d/Unity
+          # Extract serial from UNITY_LICENSE XML (Personal licenses have serial starting with F-)
+          SERIAL=$(echo "$UNITY_LICENSE" | grep -oP '(?<=<DeveloperData Value=")F-[^"]+' || echo "")
 
-          # Write license file from environment variable
-          echo "$UNITY_LICENSE" > /root/.local/share/unity3d/Unity/Unity_lic.ulf
+          if [ -z "$SERIAL" ]; then
+            echo "❌ Failed to extract serial from UNITY_LICENSE"
+            exit 1
+          fi
 
-          # Verify it was created
+          echo "✓ Serial extracted successfully"
+
+          # Activate Unity with credentials (generates machine-specific .ulf)
+          echo "Activating Unity license..."
+          unity-editor -batchmode -quit \
+            -serial "$SERIAL" \
+            -username "$UNITY_EMAIL" \
+            -password "$UNITY_PASSWORD" \
+            -logFile /dev/stdout || true
+
+          # Verify license file was created
           if [ -f "/root/.local/share/unity3d/Unity/Unity_lic.ulf" ]; then
-            echo "✓ License file installed successfully"
+            echo "✓ Unity license activated successfully"
             ls -lh /root/.local/share/unity3d/Unity/Unity_lic.ulf
           else
-            echo "✗ ERROR: Failed to create license file"
+            echo "❌ License activation failed"
             exit 1
           fi
 
