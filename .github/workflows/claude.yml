@@ -49,8 +49,8 @@ jobs:
             exit 1
           fi
 
-          # Decode base64 and extract serial (F-XXXX-XXXX-XXXX-XXXX-XXXX format)
-          SERIAL=$(echo "$ENCODED_DATA" | base64 -d | grep -oP 'F-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}' | head -1 || echo "")
+          # Decode base64 and extract serial (F-XXXX-XXXX-XXXX-XXXX-XXXX format, case-insensitive)
+          SERIAL=$(echo "$ENCODED_DATA" | base64 -d | grep -oP 'F-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}' | head -1 || echo "")
 
           if [ -z "$SERIAL" ]; then
             echo "❌ Failed to extract serial from decoded DeveloperData"
