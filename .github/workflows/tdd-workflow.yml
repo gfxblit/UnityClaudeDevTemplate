@@ -1,10 +1,6 @@
 name: Workflow-Driven TDD
 
 on:
-  issue_comment:
-    types: [created]
-  issues:
-    types: [opened, assigned]
   workflow_dispatch:
     inputs:
       issue_number:
