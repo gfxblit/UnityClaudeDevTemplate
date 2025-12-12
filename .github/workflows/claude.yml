@@ -21,6 +21,11 @@ jobs:
     outputs:
       unity-license: ${{ steps.export-license.outputs.license }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: Activate Unity License
         uses: game-ci/unity-activate@v2
         env:
@@ -31,8 +36,22 @@ jobs:
       - name: Export activated license
         id: export-license
         run: |
+          # The license file is created in the workspace by the unity-activate action
+          # Look for it in the _activate-license directory
+          if [ -f "_activate-license/Unity_lic.ulf" ]; then
+            LICENSE_FILE="_activate-license/Unity_lic.ulf"
+          elif [ -f "$HOME/.local/share/unity3d/Unity/Unity_lic.ulf" ]; then
+            LICENSE_FILE="$HOME/.local/share/unity3d/Unity/Unity_lic.ulf"
+          else
+            echo "Error: License file not found in expected locations"
+            echo "Searching for license files..."
+            find . -name "Unity_lic.ulf" -o -name "*.ulf" 2>/dev/null || true
+            find $HOME -name "Unity_lic.ulf" -o -name "*.ulf" 2>/dev/null || true
+            exit 1
+          fi
+
           # Read the activated license file
-          LICENSE_CONTENT=$(cat /home/runner/.local/share/unity3d/Unity/Unity_lic.ulf)
+          LICENSE_CONTENT=$(cat "$LICENSE_FILE")
 
           # Mask the license content BEFORE any output
           echo "::add-mask::$LICENSE_CONTENT"
