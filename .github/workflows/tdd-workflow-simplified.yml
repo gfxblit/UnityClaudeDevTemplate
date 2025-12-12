@@ -1,21 +1,19 @@
-name: Workflow-Driven TDD (Simplified)
+name: Workflow-Driven TDD (Simplified) [DISABLED]
 
+# DISABLED - This workflow has been disabled and will not trigger automatically
 on:
-  issue_comment:
-    types: [created]
-  issues:
-    types: [opened, assigned]
   workflow_dispatch:
     inputs:
-      issue_number:
-        description: 'Issue number to work on'
+      disabled:
+        description: 'This workflow is disabled'
         required: false
         type: string
-      iteration:
-        description: 'TDD iteration number'
-        required: false
-        default: '1'
-        type: string
+
+# Original triggers (disabled):
+#   issue_comment:
+#     types: [created]
+#   issues:
+#     types: [opened, assigned]
 
 jobs:
   # Job 1: Run tests and determine job
