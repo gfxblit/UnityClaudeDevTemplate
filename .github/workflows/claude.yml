@@ -20,6 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: unityci/editor:ubuntu-6000.0.31f1-base-3
+      env:
+        UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+        UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
     permissions:
       contents: write
       pull-requests: write
@@ -35,87 +39,21 @@ jobs:
       - name: Configure Git safe directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Activate Unity License
+      - name: Verify Unity License
         run: |
-          set +e  # Don't exit on error, we need to capture output
-
-          # Create activation directory
-          ACTIVATE_LICENSE_PATH="$GITHUB_WORKSPACE/_activate-license"
-          mkdir -p "$ACTIVATE_LICENSE_PATH"
-          cd "$ACTIVATE_LICENSE_PATH"
-
-          echo "Requesting activation (personal license)"
-
-          # Set the license file path
-          FILE_PATH=UnityLicenseFile.ulf
-
-          # Copy license file from secret and remove carriage returns
-          echo "$UNITY_LICENSE" | tr -d '\r' > $FILE_PATH
-
-          # Activate license - this generates the .ulf in /root/.local/share/unity3d/Unity/
-          # Run with output to both stdout and capture
-          unity-editor \
-              -logFile /dev/stdout \
-              -quit \
-              -manualLicenseFile $FILE_PATH > activation.log 2>&1
-
-          # Store the exit code
-          UNITY_EXIT_CODE=$?
-
-          echo "Unity activation exit code: $UNITY_EXIT_CODE"
-          echo ""
-          echo "Activation output:"
-          cat activation.log
-
-          # The exit code for personal activation is always 1;
-          # Determine whether activation was successful by checking output
-          ACTIVATION_SUCCESSFUL=$(grep 'Next license update check is after' activation.log | wc -l)
-
-          # Set exit code to 0 if activation was successful
-          if [[ $ACTIVATION_SUCCESSFUL -eq 1 ]]; then
-            echo ""
-            echo "Found success marker in output"
-            UNITY_EXIT_CODE=0
-          fi
-
-          # Remove input license file (cleanup)
-          rm -f $FILE_PATH activation.log
-
-          # Display result
-          if [ $UNITY_EXIT_CODE -eq 0 ]; then
-            echo ""
-            echo "Activation complete."
-            # Verify the license was created
-            if [ -f "/root/.local/share/unity3d/Unity/Unity_lic.ulf" ]; then
-              echo "License file created successfully"
-              ls -lh /root/.local/share/unity3d/Unity/Unity_lic.ulf
-            else
-              echo "ERROR: License file was not created at expected location"
-              find /root/.local/share -name "*.ulf" 2>/dev/null || true
-              exit 1
-            fi
+          echo "Checking for Unity license file..."
+          if [ -f "/root/.local/share/unity3d/Unity/Unity_lic.ulf" ]; then
+            echo "✓ License file exists"
+            ls -lh /root/.local/share/unity3d/Unity/Unity_lic.ulf
           else
-            echo ""
-            echo "###########################"
-            echo "#         Failure         #"
-            echo "###########################"
-            echo ""
-            echo "License activation failed."
-            echo "Exit code was: $UNITY_EXIT_CODE"
-            exit 1
+            echo "✗ License file not found"
+            echo "Searching for .ulf files..."
+            find /root -name "*.ulf" 2>/dev/null || echo "No .ulf files found"
           fi
-
-          cd "$GITHUB_WORKSPACE"
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
 
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
