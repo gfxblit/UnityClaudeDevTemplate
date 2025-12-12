@@ -39,16 +39,21 @@ jobs:
       - name: Configure Git safe directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Verify Unity License
+      - name: Install Unity License
         run: |
-          echo "Checking for Unity license file..."
+          # Create license directory
+          mkdir -p /root/.local/share/unity3d/Unity
+
+          # Write license file from environment variable
+          echo "$UNITY_LICENSE" > /root/.local/share/unity3d/Unity/Unity_lic.ulf
+
+          # Verify it was created
           if [ -f "/root/.local/share/unity3d/Unity/Unity_lic.ulf" ]; then
-            echo "✓ License file exists"
+            echo "✓ License file installed successfully"
             ls -lh /root/.local/share/unity3d/Unity/Unity_lic.ulf
           else
-            echo "✗ License file not found"
-            echo "Searching for .ulf files..."
-            find /root -name "*.ulf" 2>/dev/null || echo "No .ulf files found"
+            echo "✗ ERROR: Failed to create license file"
+            exit 1
           fi
 
       - name: Run Claude Code
