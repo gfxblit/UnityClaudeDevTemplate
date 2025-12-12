@@ -70,7 +70,6 @@ jobs:
             -serial "$UNITY_SERIAL" \
             -username "$UNITY_EMAIL" \
             -password "$UNITY_PASSWORD" \
-            -projectPath "/BlankProject" \
             -logFile /dev/stdout || true
 
           # Verify license file was created
