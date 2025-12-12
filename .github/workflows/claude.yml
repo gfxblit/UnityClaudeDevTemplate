@@ -64,23 +64,18 @@ jobs:
 
           echo "✓ Serial extracted successfully"
 
-          # Activate Unity with credentials (generates machine-specific .ulf)
+          # Activate Unity with credentials
+          # Unity will activate the license, load the project, and quit
+          # If activation fails, Unity will exit with non-zero code
           echo "Activating Unity license..."
           unity-editor -batchmode -quit \
             -serial "$UNITY_SERIAL" \
             -username "$UNITY_EMAIL" \
             -password "$UNITY_PASSWORD" \
             -projectPath "$GITHUB_WORKSPACE" \
-            -logFile /dev/stdout || true
+            -logFile /dev/stdout
 
-          # Verify license file was created
-          if [ -f "/root/.local/share/unity3d/Unity/Unity_lic.ulf" ]; then
-            echo "✓ Unity license activated successfully"
-            ls -lh /root/.local/share/unity3d/Unity/Unity_lic.ulf
-          else
-            echo "❌ License activation failed"
-            exit 1
-          fi
+          echo "✓ Unity license activated successfully"
 
       - name: Run Claude Code
         id: claude
