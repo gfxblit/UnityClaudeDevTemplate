@@ -41,11 +41,19 @@ jobs:
 
       - name: Activate Unity License
         run: |
-          # Extract serial from UNITY_LICENSE XML (Personal licenses have serial starting with F-)
-          SERIAL=$(echo "$UNITY_LICENSE" | grep -oP '(?<=<DeveloperData Value=")F-[^"]+' || echo "")
+          # Extract and decode DeveloperData from UNITY_LICENSE XML
+          ENCODED_DATA=$(echo "$UNITY_LICENSE" | grep -oP '(?<=<DeveloperData Value=")[^"]+' || echo "")
+
+          if [ -z "$ENCODED_DATA" ]; then
+            echo "❌ Failed to find DeveloperData in UNITY_LICENSE"
+            exit 1
+          fi
+
+          # Decode base64 and extract serial (F-XXXX-XXXX-XXXX-XXXX-XXXX format)
+          SERIAL=$(echo "$ENCODED_DATA" | base64 -d | grep -oP 'F-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}' | head -1 || echo "")
 
           if [ -z "$SERIAL" ]; then
-            echo "❌ Failed to extract serial from UNITY_LICENSE"
+            echo "❌ Failed to extract serial from decoded DeveloperData"
             exit 1
           fi
 
