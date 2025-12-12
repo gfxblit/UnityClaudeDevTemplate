@@ -1,0 +1,354 @@
+name: Workflow-Driven TDD (Simplified)
+
+on:
+  issue_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to work on'
+        required: false
+        type: string
+      iteration:
+        description: 'TDD iteration number'
+        required: false
+        default: '1'
+        type: string
+
+jobs:
+  # Job 1: Run tests and determine job
+  analyze:
+    name: Analyze & Determine Job
+    runs-on: ubuntu-latest
+    # Skip test run on initial issue creation (no tests exist yet)
+    if: |
+      !(github.event_name == 'issues' && github.event.action == 'opened')
+    outputs:
+      phase: ${{ steps.determine.outputs.phase }}
+      phase_name: ${{ steps.determine.outputs.phase_name }}
+      phase_instruction: ${{ steps.determine.outputs.phase_instruction }}
+      should_run_claude: ${{ steps.determine.outputs.should_run_claude }}
+      should_continue: ${{ steps.determine.outputs.should_continue }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 10
+
+      - name: Check if tests exist
+        id: check-tests
+        run: |
+          if find Assets/Tests/PlayMode -name "*.cs" -type f 2>/dev/null | grep -q .; then
+            echo "exist=true" >> $GITHUB_OUTPUT
+            echo "✅ Tests found"
+          else
+            echo "exist=false" >> $GITHUB_OUTPUT
+            echo "❌ No tests found"
+          fi
+
+      - name: Cache Unity Library
+        if: steps.check-tests.outputs.exist == 'true'
+        uses: actions/cache@v3
+        with:
+          path: Library
+          key: Library-${{ runner.os }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-${{ runner.os }}-
+            Library-
+
+      - name: Run PlayMode tests
+        if: steps.check-tests.outputs.exist == 'true'
+        id: run-tests
+        uses: game-ci/unity-test-runner@v4
+        continue-on-error: true
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: .
+          testMode: PlayMode
+          artifactsPath: test-results
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: TDD Test Results
+
+      - name: Check for compilation errors
+        id: check-compilation
+        if: steps.check-tests.outputs.exist == 'true' && always()
+        run: |
+          if [ "${{ steps.run-tests.outcome }}" == "failure" ] && [ ! -f "test-results/PlayMode-results.xml" ]; then
+            echo "failed=true" >> $GITHUB_OUTPUT
+            echo "❌ Compilation failed"
+          else
+            echo "failed=false" >> $GITHUB_OUTPUT
+            echo "✅ Compilation succeeded"
+          fi
+
+      - name: Parse test results
+        id: parse-results
+        if: steps.check-tests.outputs.exist == 'true'
+        run: |
+          if [ -f "test-results/PlayMode-results.xml" ]; then
+            total=$(grep -oP 'total="\K[0-9]+' test-results/PlayMode-results.xml | head -1)
+            passed=$(grep -oP 'passed="\K[0-9]+' test-results/PlayMode-results.xml | head -1)
+            failed=$(grep -oP 'failed="\K[0-9]+' test-results/PlayMode-results.xml | head -1)
+            echo "total=${total:-0}" >> $GITHUB_OUTPUT
+            echo "passed=${passed:-0}" >> $GITHUB_OUTPUT
+            echo "failed=${failed:-0}" >> $GITHUB_OUTPUT
+            echo "📊 Test Results: $passed/$total passed, $failed failed"
+          else
+            echo "total=0" >> $GITHUB_OUTPUT
+            echo "passed=0" >> $GITHUB_OUTPUT
+            echo "failed=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload test results
+        if: steps.check-tests.outputs.exist == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-iteration-${{ inputs.iteration || '1' }}
+          path: test-results/
+
+      # Determine phase logic (merged from determine-phase job)
+      - name: Determine phase from test state
+        id: determine
+        env:
+          TESTS_EXIST: ${{ steps.check-tests.outputs.exist }}
+          COMPILATION_FAILED: ${{ steps.check-compilation.outputs.failed }}
+          TOTAL_TESTS: ${{ steps.parse-results.outputs.total }}
+          PASSED_TESTS: ${{ steps.parse-results.outputs.passed }}
+          FAILED_TESTS: ${{ steps.parse-results.outputs.failed }}
+        run: |
+          echo "🔍 Analyzing current state..."
+          echo "Tests exist: $TESTS_EXIST"
+          echo "Compilation failed: $COMPILATION_FAILED"
+          echo "Total: $TOTAL_TESTS, Passed: $PASSED_TESTS, Failed: $FAILED_TESTS"
+
+          last_commit_msg=$(git log -1 --pretty=%B 2>/dev/null || echo "")
+          echo "Last commit: $last_commit_msg"
+
+          # PRIORITY: Check for compilation failures first
+          if [ "$COMPILATION_FAILED" = "true" ]; then
+            echo "phase=0" >> $GITHUB_OUTPUT
+            echo "phase_name=Fix Compilation Errors" >> $GITHUB_OUTPUT
+            echo "phase_instruction=⚠️ The project failed to compile! Fix all compilation errors before tests can run." >> $GITHUB_OUTPUT
+            echo "should_run_claude=true" >> $GITHUB_OUTPUT
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+            echo "🔥 Phase 0: Fix Compilation"
+
+          # No tests → Write tests
+          elif [ "$TESTS_EXIST" != "true" ]; then
+            echo "phase=2" >> $GITHUB_OUTPUT
+            echo "phase_name=Write Failing Tests" >> $GITHUB_OUTPUT
+            echo "phase_instruction=Write PlayMode tests for all requirements. Tests should fail because no implementation exists yet." >> $GITHUB_OUTPUT
+            echo "should_run_claude=true" >> $GITHUB_OUTPUT
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+            echo "📝 Phase 2: Write Failing Tests"
+
+          # All tests fail → Implement
+          elif [ "$FAILED_TESTS" = "$TOTAL_TESTS" ] && [ "$TOTAL_TESTS" -gt 0 ]; then
+            echo "phase=3" >> $GITHUB_OUTPUT
+            echo "phase_name=Implement Minimum Code" >> $GITHUB_OUTPUT
+            echo "phase_instruction=Write the simplest code to make tests pass. Focus on making ONE test pass at a time." >> $GITHUB_OUTPUT
+            echo "should_run_claude=true" >> $GITHUB_OUTPUT
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+            echo "🔨 Phase 3: Implement (all tests failing)"
+
+          # Some tests fail → Continue implementing
+          elif [ "$FAILED_TESTS" -gt 0 ]; then
+            echo "phase=3" >> $GITHUB_OUTPUT
+            echo "phase_name=Continue Implementation" >> $GITHUB_OUTPUT
+            echo "phase_instruction=Continue implementing to fix remaining failing tests. $PASSED_TESTS/$TOTAL_TESTS tests already pass." >> $GITHUB_OUTPUT
+            echo "should_run_claude=true" >> $GITHUB_OUTPUT
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+            echo "🔨 Phase 3: Continue Implementation ($PASSED_TESTS/$TOTAL_TESTS passing)"
+
+          # All tests pass
+          elif [ "$PASSED_TESTS" = "$TOTAL_TESTS" ] && [ "$PASSED_TESTS" -gt 0 ]; then
+            # Check if we just wrote tests (TDD violation check)
+            if echo "$last_commit_msg" | grep -qiE "^test:"; then
+              echo "phase=2" >> $GITHUB_OUTPUT
+              echo "phase_name=Fix Tests - Must Fail First" >> $GITHUB_OUTPUT
+              echo "phase_instruction=⚠️ TDD VIOLATION: Tests must FAIL before implementation!" >> $GITHUB_OUTPUT
+              echo "should_run_claude=true" >> $GITHUB_OUTPUT
+              echo "should_continue=true" >> $GITHUB_OUTPUT
+              echo "⚠️ TDD Violation"
+            # Check if we just refactored → Final verification
+            elif echo "$last_commit_msg" | grep -qiE "^(refactor|style|chore):"; then
+              echo "phase=5" >> $GITHUB_OUTPUT
+              echo "phase_name=Final Verification" >> $GITHUB_OUTPUT
+              echo "phase_instruction=All tests pass after refactoring. Verify completeness and prepare for PR." >> $GITHUB_OUTPUT
+              echo "should_run_claude=true" >> $GITHUB_OUTPUT
+              echo "should_continue=false" >> $GITHUB_OUTPUT
+              echo "✅ Phase 5: Final Verification"
+            # Need to refactor
+            else
+              echo "phase=4" >> $GITHUB_OUTPUT
+              echo "phase_name=Refactor Implementation" >> $GITHUB_OUTPUT
+              echo "phase_instruction=All tests pass! Refactor code to be clean, modular, and maintainable." >> $GITHUB_OUTPUT
+              echo "should_run_claude=true" >> $GITHUB_OUTPUT
+              echo "should_continue=true" >> $GITHUB_OUTPUT
+              echo "♻️ Phase 4: Refactor"
+            fi
+          else
+            echo "phase=0" >> $GITHUB_OUTPUT
+            echo "phase_name=Unknown State" >> $GITHUB_OUTPUT
+            echo "phase_instruction=Unexpected test state. Please investigate." >> $GITHUB_OUTPUT
+            echo "should_run_claude=false" >> $GITHUB_OUTPUT
+            echo "should_continue=false" >> $GITHUB_OUTPUT
+            echo "❓ Unknown state"
+          fi
+
+      - name: Create summary
+        run: |
+          echo "## 🎯 TDD Phase Determined" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Phase ${{ steps.determine.outputs.phase }}: ${{ steps.determine.outputs.phase_name }}**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.determine.outputs.phase_instruction }}" >> $GITHUB_STEP_SUMMARY
+
+  # Special job for initial issue (skips analyze)
+  bootstrap:
+    name: Bootstrap (Phase 2)
+    if: github.event_name == 'issues' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    outputs:
+      phase: "2"
+      phase_name: "Write Failing Tests"
+      phase_instruction: "Write PlayMode tests for all requirements. Tests should fail because no implementation exists yet."
+      should_run_claude: "true"
+      should_continue: "true"
+    steps:
+      - name: Bootstrap message
+        run: |
+          echo "## 🎬 Bootstrap: Starting TDD Cycle" >> $GITHUB_STEP_SUMMARY
+          echo "Writing failing tests first..." >> $GITHUB_STEP_SUMMARY
+
+  # Job 2: Execute job
+  execute:
+    name: Execute Job
+    needs: [analyze, bootstrap]
+    if: |
+      always() &&
+      (needs.analyze.result == 'success' || needs.bootstrap.result == 'success') &&
+      (needs.analyze.outputs.should_run_claude == 'true' || needs.bootstrap.outputs.should_run_claude == 'true')
+    runs-on: ubuntu-latest
+    container:
+      image: unityci/editor:ubuntu-6000.0.31f1-base-3
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+      id-token: write
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-results-iteration-${{ inputs.iteration || '1' }}
+          path: test-results/
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          TDD_PHASE: ${{ needs.analyze.outputs.phase || needs.bootstrap.outputs.phase }}
+          TDD_PHASE_NAME: ${{ needs.analyze.outputs.phase_name || needs.bootstrap.outputs.phase_name }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          additional_permissions: |
+            actions: read
+          prompt: |
+            # WORKFLOW-DRIVEN TDD MODE ACTIVE
+
+            You are in iteration ${{ inputs.iteration || '1' }} of a workflow-driven TDD cycle.
+
+            **Phase ${{ needs.analyze.outputs.phase || needs.bootstrap.outputs.phase }}: ${{ needs.analyze.outputs.phase_name || needs.bootstrap.outputs.phase_name }}**
+
+            ${{ needs.analyze.outputs.phase_instruction || needs.bootstrap.outputs.phase_instruction }}
+
+            ## Your Task
+            Complete ONLY the work for this phase. The workflow will automatically run tests and determine the next phase.
+
+            ## Critical Rules
+            - Stay focused on THIS phase only
+            - Commit and push your changes when done
+            - Use appropriate commit message format (test:/feat:/refactor:/fix:)
+            - DO NOT attempt to run unity-editor commands
+            - If compilation fails, the workflow will detect it and route you to Phase 0
+
+      - name: Check for changes
+        id: check-changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          elif [ -n "$(git log origin/${{ github.head_ref || github.ref_name }}..HEAD 2>/dev/null)" ]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Trigger next iteration (merged from trigger-next-iteration job)
+      - name: Trigger next iteration
+        if: |
+          steps.check-changes.outputs.changes == 'true' &&
+          (needs.analyze.outputs.should_continue == 'true' || needs.bootstrap.outputs.should_continue == 'true') &&
+          (needs.analyze.outputs.phase != '5' && needs.bootstrap.outputs.phase != '5')
+        run: |
+          echo "⏳ Waiting for git push to complete..."
+          sleep 10
+
+          iteration=$(( ${{ inputs.iteration || '1' }} + 1 ))
+          issue_number="${{ github.event.issue.number || inputs.issue_number }}"
+
+          echo "🔄 Triggering iteration $iteration"
+
+          gh workflow run tdd-workflow-simplified.yml \
+            -f issue_number="$issue_number" \
+            -f iteration="$iteration"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Create PR (merged from create-pr job)
+      - name: Create pull request
+        if: |
+          steps.check-changes.outputs.changes == 'true' &&
+          (needs.analyze.outputs.phase == '5' || needs.bootstrap.outputs.phase == '5')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pr_number=$(gh pr list --head "${{ github.head_ref || github.ref_name }}" --json number --jq '.[0].number')
+
+          if [ -z "$pr_number" ]; then
+            echo "Creating pull request..."
+            gh pr create \
+              --title "Implement feature from issue #${{ github.event.issue.number || inputs.issue_number }}" \
+              --body "## ✅ TDD Cycle Complete
+
+            All tests pass and code is refactored.
+
+            Completed in ${{ inputs.iteration || '1' }} iterations.
+
+            🤖 Generated with workflow-driven TDD"
+          else
+            echo "PR #$pr_number already exists"
+          fi
