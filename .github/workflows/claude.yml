@@ -37,6 +37,8 @@ jobs:
 
       - name: Activate Unity License
         run: |
+          set +e  # Don't exit on error, we need to capture output
+
           # Create activation directory
           ACTIVATE_LICENSE_PATH="$GITHUB_WORKSPACE/_activate-license"
           mkdir -p "$ACTIVATE_LICENSE_PATH"
@@ -51,28 +53,37 @@ jobs:
           echo "$UNITY_LICENSE" | tr -d '\r' > $FILE_PATH
 
           # Activate license - this generates the .ulf in /root/.local/share/unity3d/Unity/
-          ACTIVATION_OUTPUT=$(unity-editor \
+          # Run with output to both stdout and capture
+          unity-editor \
               -logFile /dev/stdout \
               -quit \
-              -manualLicenseFile $FILE_PATH)
+              -manualLicenseFile $FILE_PATH > activation.log 2>&1
 
           # Store the exit code
           UNITY_EXIT_CODE=$?
 
+          echo "Unity activation exit code: $UNITY_EXIT_CODE"
+          echo ""
+          echo "Activation output:"
+          cat activation.log
+
           # The exit code for personal activation is always 1;
           # Determine whether activation was successful by checking output
-          ACTIVATION_SUCCESSFUL=$(echo "$ACTIVATION_OUTPUT" | grep 'Next license update check is after' | wc -l)
+          ACTIVATION_SUCCESSFUL=$(grep 'Next license update check is after' activation.log | wc -l)
 
           # Set exit code to 0 if activation was successful
           if [[ $ACTIVATION_SUCCESSFUL -eq 1 ]]; then
+            echo ""
+            echo "Found success marker in output"
             UNITY_EXIT_CODE=0
           fi
 
           # Remove input license file (cleanup)
-          rm -f $FILE_PATH
+          rm -f $FILE_PATH activation.log
 
           # Display result
           if [ $UNITY_EXIT_CODE -eq 0 ]; then
+            echo ""
             echo "Activation complete."
             # Verify the license was created
             if [ -f "/root/.local/share/unity3d/Unity/Unity_lic.ulf" ]; then
@@ -80,19 +91,18 @@ jobs:
               ls -lh /root/.local/share/unity3d/Unity/Unity_lic.ulf
             else
               echo "ERROR: License file was not created at expected location"
+              find /root/.local/share -name "*.ulf" 2>/dev/null || true
               exit 1
             fi
           else
+            echo ""
             echo "###########################"
             echo "#         Failure         #"
             echo "###########################"
             echo ""
             echo "License activation failed."
             echo "Exit code was: $UNITY_EXIT_CODE"
-            echo ""
-            echo "Activation output:"
-            echo "$ACTIVATION_OUTPUT"
-            exit $UNITY_EXIT_CODE
+            exit 1
           fi
 
           cd "$GITHUB_WORKSPACE"
