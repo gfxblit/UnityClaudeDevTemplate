@@ -36,17 +36,15 @@ jobs:
       - name: Export activated license
         id: export-license
         run: |
-          # The license file is created in the workspace by the unity-activate action
-          # Look for it in the _activate-license directory
-          if [ -f "_activate-license/Unity_lic.ulf" ]; then
-            LICENSE_FILE="_activate-license/Unity_lic.ulf"
-          elif [ -f "$HOME/.local/share/unity3d/Unity/Unity_lic.ulf" ]; then
-            LICENSE_FILE="$HOME/.local/share/unity3d/Unity/Unity_lic.ulf"
-          else
-            echo "Error: License file not found in expected locations"
+          # The license file is created by unity-activate in the GitHub Actions temp home directory
+          # This is volume-mounted to the container as /github/home
+          GITHUB_HOME="/home/runner/work/_temp/_github_home"
+          LICENSE_FILE="$GITHUB_HOME/.local/share/unity3d/Unity/Unity_lic.ulf"
+
+          if [ ! -f "$LICENSE_FILE" ]; then
+            echo "Error: License file not found at $LICENSE_FILE"
             echo "Searching for license files..."
-            find . -name "Unity_lic.ulf" -o -name "*.ulf" 2>/dev/null || true
-            find $HOME -name "Unity_lic.ulf" -o -name "*.ulf" 2>/dev/null || true
+            find /home/runner/work/_temp -name "Unity_lic.ulf" -o -name "*.ulf" 2>/dev/null || true
             exit 1
           fi
 
