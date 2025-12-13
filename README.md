@@ -38,3 +38,4 @@ This template provides a ready-to-use Unity development environment with Claude 
 ---
 
 Built with [Claude Code](https://claude.com/claude-code)
+
