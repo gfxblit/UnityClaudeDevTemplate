@@ -136,12 +136,13 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           targetPlatform: WebGL
+          buildName: WebGLBuild
 
       - name: Upload WebGL Build
         uses: actions/upload-artifact@v4
         with:
           name: webgl-build
-          path: build/WebGL
+          path: build/WebGLBuild
           retention-days: 7
 
   deploy-preview:
