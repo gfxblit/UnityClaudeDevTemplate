@@ -139,3 +139,99 @@ jobs:
           name: webgl-build
           path: build/WebGL
           retention-days: 7
+
+  deploy-preview:
+    # Only deploy preview for PRs, not issues
+    if: github.event.pull_request.number != ''
+    needs: build-webgl
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+        continue-on-error: true
+        id: checkout
+
+      - name: Check if gh-pages exists
+        if: steps.checkout.outcome == 'failure'
+        run: |
+          echo "::error::gh-pages branch does not exist. Please create it first."
+          echo "See workflow comments for setup instructions."
+          exit 1
+
+      - name: Download WebGL Build
+        uses: actions/download-artifact@v4
+        with:
+          name: webgl-build
+          path: pr-${{ github.event.pull_request.number }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit and push preview
+        run: |
+          git add pr-${{ github.event.pull_request.number }}
+          git commit -m "Deploy preview for PR #${{ github.event.pull_request.number }}" || echo "No changes to commit"
+          git push origin gh-pages
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const previewUrl = `https://gfxblit.github.io/UnityClaudeDevTemplate/pr-${prNumber}/`;
+
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `🎮 **WebGL Preview Deployed!**\n\n**Preview URL:** ${previewUrl}\n\nTest the build and approve the production deployment when ready.`
+            });
+
+  # deploy-production:
+  #   needs: build-webgl
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: write
+  #   environment:
+  #     name: production
+  #     url: https://gfxblit.github.io/UnityClaudeDevTemplate/
+  #
+  #   # IMPORTANT: Before enabling this job, create the 'production' environment:
+  #   # 1. Go to Settings → Environments → New environment
+  #   # 2. Name: production
+  #   # 3. Enable "Required reviewers" and add yourself
+  #   # 4. Save protection rules
+  #   #
+  #   # This ensures manual approval is required before production deployment.
+  #
+  #   steps:
+  #     - name: Checkout gh-pages branch
+  #       uses: actions/checkout@v4
+  #       with:
+  #         ref: gh-pages
+  #         fetch-depth: 0
+  #
+  #     - name: Download WebGL Build
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: webgl-build
+  #         path: .
+  #
+  #     - name: Configure Git
+  #       run: |
+  #         git config user.name "github-actions[bot]"
+  #         git config user.email "github-actions[bot]@users.noreply.github.com"
+  #
+  #     - name: Commit and push production
+  #       run: |
+  #         git add .
+  #         git commit -m "Deploy production build from ${{ github.sha }}" || echo "No changes to commit"
+  #         git push origin gh-pages
