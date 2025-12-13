@@ -142,13 +142,25 @@ jobs:
 
   deploy-preview:
     # Only deploy preview for PRs, not issues
-    if: github.event.pull_request.number != ''
+    # Check if this is a PR by looking for pull_request key in the issue object
+    if: github.event.issue.pull_request != null || github.event.pull_request != null
     needs: build-webgl
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
     steps:
+      - name: Get PR number
+        id: pr
+        run: |
+          # For issue_comment events on PRs, use issue number
+          # For pull_request events, use pull_request number
+          if [ "${{ github.event.issue.number }}" != "" ]; then
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout gh-pages branch
         uses: actions/checkout@v4
         with:
@@ -168,7 +180,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: webgl-build
-          path: pr-${{ github.event.pull_request.number }}
+          path: pr-${{ steps.pr.outputs.number }}
 
       - name: Configure Git
         run: |
@@ -177,15 +189,15 @@ jobs:
 
       - name: Commit and push preview
         run: |
-          git add pr-${{ github.event.pull_request.number }}
-          git commit -m "Deploy preview for PR #${{ github.event.pull_request.number }}" || echo "No changes to commit"
+          git add pr-${{ steps.pr.outputs.number }}
+          git commit -m "Deploy preview for PR #${{ steps.pr.outputs.number }}" || echo "No changes to commit"
           git push origin gh-pages
 
       - name: Comment preview URL on PR
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = context.payload.pull_request.number;
+            const prNumber = ${{ steps.pr.outputs.number }};
             const previewUrl = `https://gfxblit.github.io/UnityClaudeDevTemplate/pr-${prNumber}/`;
 
             github.rest.issues.createComment({
