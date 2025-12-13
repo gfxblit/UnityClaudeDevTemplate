@@ -78,6 +78,9 @@ jobs:
       #     echo "✓ Unity license activated successfully"
 
       # Temporarily disabled for testing WebGL build
+      # IMPORTANT: When uncommenting Claude step, ensure it creates a PR for all changes
+      # Claude should NEVER commit directly to main - all changes must go through PRs
+      # This allows the WebGL preview deployment to work correctly
       # - name: Run Claude Code
       #   id: claude
       #   uses: anthropics/claude-code-action@v1
@@ -98,7 +101,8 @@ jobs:
         run: echo "Skipping Claude step for WebGL build testing"
 
   build-webgl:
-    needs: claude
+    # Temporarily commented out for testing - uncomment when Claude step is re-enabled
+    # needs: claude
     runs-on: ubuntu-latest
     permissions:
       contents: read
