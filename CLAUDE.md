@@ -11,7 +11,7 @@ When you mention `@claude` in a GitHub issue, PR comment, or review:
 3. License is securely transferred to the Claude Code container
 4. Claude runs with full `unity-editor` CLI access
 5. Claude autonomously executes the complete TDD cycle
-6. Claude commits and pushes changes by creating a feature branch. A human needs to review the changes and create a Pull Request for integration. It will NEVER commit directly to main. This allows for code review and WebGL preview deployment.
+6. Claude commits and pushes changes by creating a Pull Request. It will NEVER commit directly to main. This allows for code review and WebGL preview deployment.
 
 **You have access to `unity-editor` CLI for running tests!** The workflow pre-activates Unity licensing, so you can run PlayMode tests directly.
 
@@ -153,7 +153,7 @@ public IEnumerator WhenPlayerCollectsItem_ShouldIncreaseScore()
 
 ---
 
-## Phase 6: Create Pull Request
+## Phase 6: Commit Changes
 
 **Process:**
 1. Commit all changes with descriptive messages:
@@ -162,34 +162,9 @@ public IEnumerator WhenPlayerCollectsItem_ShouldIncreaseScore()
    feat: Implement [feature] with TDD approach
    refactor: Simplify [component] logic
    ```
-2. Push to feature branch
-3. Create PR with:
-   - **Title:** Concise feature description
-   - **Summary:** List of implemented requirements
-   - **Test Plan:**
-     - List all test cases
-     - Confirm all tests passing
-     - Note any edge cases covered
+   The committed changes will be available on the current branch. A human is then responsible for pushing these changes and creating a Pull Request for review.
 
-**Template:**
-```markdown
-## Summary
-Implemented [feature] using TDD approach
-
-## Requirements Met
-- [ ] Requirement 1
-- [ ] Requirement 2
-
-## Test Coverage
-- All requirements covered by PlayMode tests
-- [X] tests passing
-- Edge cases tested: [list]
-
-## Implementation Notes
-[Brief description of approach]
-```
-
-**Exit Criteria:** PR created with complete documentation
+**Exit Criteria:** Changes committed with descriptive messages
 
 ---
 
@@ -202,7 +177,7 @@ Use this checklist for each feature:
 - [ ] Phase 3: Minimal implementation (all tests green)
 - [ ] Phase 4: Refactored to clean, modular code
 - [ ] Phase 5: Final verification passed
-- [ ] Phase 6: PR created with documentation
+- [ ] Phase 6: Changes committed
 
 ---
 
