@@ -56,7 +56,6 @@ jobs:
           claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
 
   build-webgl:
-    needs: claude-review
     runs-on: ubuntu-latest
     permissions:
       contents: read
