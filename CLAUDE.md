@@ -11,7 +11,7 @@ When you mention `@claude` in a GitHub issue, PR comment, or review:
 3. License is securely transferred to the Claude Code container
 4. Claude runs with full `unity-editor` CLI access
 5. Claude autonomously executes the complete TDD cycle
-6. Claude commits and pushes changes by creating a Pull Request. It will NEVER commit directly to main. This allows for code review and WebGL preview deployment.
+6. Claude commits and pushes changes by creating a feature branch. A human needs to review the changes and create a Pull Request for integration. It will NEVER commit directly to main. This allows for code review and WebGL preview deployment.
 
 **You have access to `unity-editor` CLI for running tests!** The workflow pre-activates Unity licensing, so you can run PlayMode tests directly.
 
