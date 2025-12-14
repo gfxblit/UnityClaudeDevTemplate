@@ -7,5 +7,9 @@ EditorBuildSettings:
   m_Scenes:
   - enabled: 1
     path: Assets/Scenes/BouncingBall.unity
-    guid: d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9
+    guid: 00000000000000000000000000000000
+  - enabled: 1
+    path: Assets/Scenes/TestScene.unity
+    guid: c1ba090cb18935c13b5742fc817f676a
   m_configObjects: {}
+  m_UseUCBPForAssetBundles: 0
