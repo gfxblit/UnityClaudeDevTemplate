@@ -249,22 +249,120 @@ public class FeatureNameTests
 
 ---
 
-## Running Tests in GitHub Actions
+## Creating Assets and .meta Files
 
-When working in the Claude Code GitHub Action environment, you have access to the `unity-editor` CLI command to run tests directly.
+**CRITICAL: NEVER manually create `.meta` files!** Unity generates these automatically with valid GUIDs and checksums.
+
+### Creating Scripts and Generating .meta Files
+
+1. **Write the C# script file directly:**
+   ```bash
+   # Use Write tool to create the script
+   Write Assets/Scripts/MyFeature.cs
+   ```
+
+2. **Trigger Unity to generate .meta files:**
+   ```bash
+   # Unity will auto-generate missing .meta files during import
+   unity-editor -batchmode -quit -projectPath . -logFile -
+   ```
+
+3. **Commit both the script and auto-generated .meta:**
+   ```bash
+   git add Assets/Scripts/MyFeature.cs Assets/Scripts/MyFeature.cs.meta
+   git commit -m "feat: Add MyFeature script"
+   ```
+
+### Creating Unity Assets (Materials, Scenes, Prefabs, etc.)
+
+For assets that cannot be created as simple text files, use **temporary Editor scripts**:
+
+1. **Write a temporary Editor script to create the assets:**
+   ```bash
+   Write Assets/Editor/TempAssetCreator.cs
+   ```
+
+   **Example script:**
+   ```csharp
+   using UnityEditor;
+   using UnityEngine;
+   using UnityEditor.SceneManagement;
+
+   public class TempAssetCreator
+   {
+       [MenuItem("Tools/CreateTestAssets")]
+       public static void CreateAssets()
+       {
+           // Create a material
+           Material mat = new Material(Shader.Find("Standard"));
+           mat.color = Color.red;
+           AssetDatabase.CreateAsset(mat, "Assets/Materials/RedMaterial.mat");
+
+           // Create a scene
+           var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects);
+           EditorSceneManager.SaveScene(scene, "Assets/Scenes/TestScene.unity");
+
+           // Create a prefab
+           GameObject obj = new GameObject("TestObject");
+           PrefabUtility.SaveAsPrefabAsset(obj, "Assets/Prefabs/TestObject.prefab");
+           Object.DestroyImmediate(obj);
+
+           AssetDatabase.SaveAssets();
+           AssetDatabase.Refresh();
+
+           Debug.Log("Assets created successfully");
+       }
+   }
+   ```
+
+2. **Execute the Editor script to create assets:**
+   ```bash
+   unity-editor -batchmode -quit \
+     -projectPath . \
+     -executeMethod TempAssetCreator.CreateAssets \
+     -logFile -
+   ```
+
+3. **Delete the temporary Editor script:**
+   ```bash
+   rm Assets/Editor/TempAssetCreator.cs
+   rm Assets/Editor/TempAssetCreator.cs.meta
+   ```
+
+4. **Commit the generated assets (with their auto-generated .meta files):**
+   ```bash
+   git add Assets/Materials/ Assets/Scenes/ Assets/Prefabs/
+   git commit -m "feat: Add test materials, scenes, and prefabs"
+   ```
+
+### Asset Creation Strategy
+
+| Asset Type | Recommended Approach |
+|------------|---------------------|
+| C# Scripts | Write directly → trigger import |
+| Simple Materials | Temporary Editor script |
+| Scenes | Temporary Editor script |
+| Prefabs | Temporary Editor script |
+
+**Key Rules:**
+- ❌ **NEVER** manually create `.meta` files
+- ❌ **NEVER** manually write Unity YAML asset files (`.mat`, `.prefab`, `.unity`)
+- ✅ **ALWAYS** let Unity generate `.meta` files via import
+- ✅ **ALWAYS** use Editor scripts for complex asset creation
+- ✅ **ALWAYS** delete temporary Editor scripts after use
+
+---
+
+## Running Tests
+
+You have access to the `unity-editor` CLI command to run tests directly.
 
 **Command to run PlayMode tests:**
 ```bash
 unity-editor -runTests -batchmode -nographics -projectPath . -testPlatform PlayMode -logFile -
 ```
 
-**Environment Variables Available:**
-- `UNITY_LICENSE` - License file content (automatically configured)
-- `UNITY_EMAIL` - Unity account email (automatically configured)
-- `UNITY_PASSWORD` - Unity account password (automatically configured)
-
 **Notes:**
-- The container already has Unity activated with the project's credentials
 - Tests run in headless mode (no graphics)
 - Results output to stdout via `-logFile -`
 - Exit code indicates test success (0) or failure (non-zero)
