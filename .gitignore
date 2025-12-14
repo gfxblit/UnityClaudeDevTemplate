@@ -35,6 +35,7 @@ ExportedObj/
 *.csproj
 *.unityproj
 *.sln
+*.slnx
 *.suo
 *.tmp
 *.user
@@ -83,3 +84,5 @@ Thumbs.db
 # Environment files with secrets
 .env
 .claude/settings.local.json
+
+.vscode/
