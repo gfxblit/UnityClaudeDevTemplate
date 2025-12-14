@@ -92,6 +92,10 @@ jobs:
           # Optional: See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://docs.claude.com/en/docs/claude-code/cli-reference for available options
 
+          # Full output will show Claude's thought process, tool calls, and responses.
+          # This is useful for debugging but can generate very large logs.
+          show_full_output: true
+
   build-webgl:
     needs: claude
     runs-on: ubuntu-latest
