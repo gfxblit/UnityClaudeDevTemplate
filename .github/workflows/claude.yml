@@ -36,73 +36,64 @@ jobs:
         with:
           fetch-depth: 0
 
-      # - name: Configure Git safe directory
-      #   run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      # - name: Activate Unity License
-      #   run: |
-      #     # Randomize machine ID for personal license (matching game-ci behavior)
-      #     echo "Randomizing machine ID for personal license activation"
-      #     dbus-uuidgen > /etc/machine-id && mkdir -p /var/lib/dbus/ && ln -sf /etc/machine-id /var/lib/dbus/machine-id
-      #
-      #     # Extract base64 data from UNITY_LICENSE XML
-      #     ENCODED_DATA=$(echo "$UNITY_LICENSE" | grep -oP '(?<=<DeveloperData Value=")[^"]+' || echo "")
-      #
-      #     if [ -z "$ENCODED_DATA" ]; then
-      #       echo "❌ Failed to find DeveloperData in UNITY_LICENSE"
-      #       exit 1
-      #     fi
-      #
-      #     # Decode base64 and skip first 4 bytes (matching game-ci implementation)
-      #     # The first 4 bytes are garbage values that need to be discarded
-      #     UNITY_SERIAL=$(echo "$ENCODED_DATA" | base64 -d | tail -c +5)
-      #
-      #     if [ -z "$UNITY_SERIAL" ]; then
-      #       echo "❌ Failed to extract serial from DeveloperData"
-      #       exit 1
-      #     fi
-      #
-      #     echo "✓ Serial extracted successfully"
-      #
-      #     # Activate Unity with credentials
-      #     # Unity will activate the license, load the project, and quit
-      #     # If activation fails, Unity will exit with non-zero code
-      #     echo "Activating Unity license..."
-      #     unity-editor -batchmode -quit \
-      #       -serial "$UNITY_SERIAL" \
-      #       -username "$UNITY_EMAIL" \
-      #       -password "$UNITY_PASSWORD" \
-      #       -projectPath "$GITHUB_WORKSPACE" \
-      #       -logFile /dev/stdout
-      #
-      #     echo "✓ Unity license activated successfully"
+      - name: Activate Unity License
+        run: |
+          # Randomize machine ID for personal license (matching game-ci behavior)
+          echo "Randomizing machine ID for personal license activation"
+          dbus-uuidgen > /etc/machine-id && mkdir -p /var/lib/dbus/ && ln -sf /etc/machine-id /var/lib/dbus/machine-id
 
-      # Temporarily disabled for testing WebGL build
-      # IMPORTANT: When uncommenting Claude step, ensure it creates a PR for all changes
-      # Claude should NEVER commit directly to main - all changes must go through PRs
-      # This allows the WebGL preview deployment to work correctly
-      # - name: Run Claude Code
-      #   id: claude
-      #   uses: anthropics/claude-code-action@v1
-      #   with:
-      #     claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      #
-      #     # This is an optional setting that allows Claude to read CI results on PRs
-      #     additional_permissions: |
-      #       actions: read
-      #
-      #     # Allow Claude to use unity-editor CLI for running tests
-      #     claude_args: '--allowed-tools Bash(unity-editor*)'
-      #
-      #     # Optional: See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-      #     # or https://docs.claude.com/en/docs/claude-code/cli-reference for available options
+          # Extract base64 data from UNITY_LICENSE XML
+          ENCODED_DATA=$(echo "$UNITY_LICENSE" | grep -oP '(?<=<DeveloperData Value=")[^"]+' || echo "")
 
-      - name: Skip Claude (testing WebGL build only)
-        run: echo "Skipping Claude step for WebGL build testing"
+          if [ -z "$ENCODED_DATA" ]; then
+            echo "❌ Failed to find DeveloperData in UNITY_LICENSE"
+            exit 1
+          fi
+
+          # Decode base64 and skip first 4 bytes (matching game-ci implementation)
+          # The first 4 bytes are garbage values that need to be discarded
+          UNITY_SERIAL=$(echo "$ENCODED_DATA" | base64 -d | tail -c +5)
+
+          if [ -z "$UNITY_SERIAL" ]; then
+            echo "❌ Failed to extract serial from DeveloperData"
+            exit 1
+          fi
+
+          echo "✓ Serial extracted successfully"
+
+          # Activate Unity with credentials
+          # Unity will activate the license, load the project, and quit
+          # If activation fails, Unity will exit with non-zero code
+          echo "Activating Unity license..."
+          unity-editor -batchmode -quit \
+            -serial "$UNITY_SERIAL" \
+            -username "$UNITY_EMAIL" \
+            -password "$UNITY_PASSWORD" \
+            -projectPath "$GITHUB_WORKSPACE" \
+            -logFile /dev/stdout
+
+          echo "✓ Unity license activated successfully"
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          # This is an optional setting that allows Claude to read CI results on PRs
+          additional_permissions: |
+            actions: read
+
+          # Allow Claude to use unity-editor CLI for running tests
+          claude_args: '--allowed-tools Bash(unity-editor*)'
+
+          # Optional: See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
+          # or https://docs.claude.com/en/docs/claude-code/cli-reference for available options
 
   build-webgl:
-    # Temporarily commented out for testing - uncomment when Claude step is re-enabled
-    # needs: claude
+    needs: claude
     runs-on: ubuntu-latest
     permissions:
       contents: read
